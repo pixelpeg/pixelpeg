@@ -8,10 +8,10 @@ headings and needs no network and no token. The data graphics below are kept
 and still work; name one in STAT_FILES and add its <img> to the README to
 bring it back, and the API fetch turns itself on.
 
-  stats.svg   hero total + weekly sparkline        (draw_stats)
-  streak.svg  current and longest streak           (draw_streak)
-  langs.svg   top languages, by bytes and by repo  (draw_langs)
-  year.svg    the year as a character map          (draw_year)
+  stats.svg   hero total + weekly sparkline        (draw_contributions)
+  streak.svg  current and longest streak           (draw_streaks)
+  langs.svg   top languages, by bytes and by repo  (draw_languages)
+  year.svg    the year as a character map          (draw_year_map)
 
 Everything shares one visual language: the same grey ink, a monospace face,
 a transparent background, and a left-to-right clipPath reveal with a cursor
@@ -60,21 +60,21 @@ query($login: String!, $from: DateTime!, $to: DateTime!) {
 """
 
 # One ink across every graphic, so the page reads as one material.
-LIGHT = dict(data="#6e7681", emph="#424a53", dim="#8c959f",
+LIGHT = dict(ink="#6e7681", strong="#424a53", mute="#8c959f",
              rule="#d8dee4", surface="#ffffff",
-             ok="#1a7f37", bad="#cf222e")
-DARK = dict(data="#c9d1d9", emph="#f0f6fc", dim="#8b949e",
+             passed="#1a7f37", failed="#cf222e")
+DARK = dict(ink="#c9d1d9", strong="#f0f6fc", mute="#8b949e",
             rule="#30363d", surface="#0d1117",
-            ok="#3fb950", bad="#f85149")
+            passed="#3fb950", failed="#f85149")
 # JBMono is the inlined subset below; the rest is a fallback for the unlikely
 # case a renderer ignores the embedded face.
-MONO = ("JBMono,ui-monospace,SFMono-Regular,Menlo,Consolas,"
+MONO_STACK = ("JBMono,ui-monospace,SFMono-Regular,Menlo,Consolas,"
         "&apos;Liberation Mono&apos;,monospace")
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 
 
 @functools.lru_cache(maxsize=None)
-def face(filename, weight):
+def font_face(filename, weight):
     """One @font-face rule with the subset inlined as a data URI.
 
     An external font URL cannot work here: these SVGs are loaded through <img>,
@@ -91,12 +91,12 @@ def face(filename, weight):
             f"src:url(data:font/woff2;base64,{b64}) format('woff2')}}")
 
 
-def font_text():
+def panel_font():
     """Basic latin, both weights — for the data graphics."""
-    return face("jbmono-400.woff2", 400) + face("jbmono-600.woff2", 600)
+    return font_face("jbmono-400.woff2", 400) + font_face("jbmono-600.woff2", 600)
 
 
-def font_head():
+def heading_font():
     """Basic latin at 600.
 
     This was once a subset cut to exactly the letters the headings spelled,
@@ -104,27 +104,27 @@ def font_head():
     missing glyph falls back to the viewer's own monospace mid-word. Section
     names are content, so they get the face that covers all of them.
     """
-    return face("jbmono-600.woff2", 600)
+    return font_face("jbmono-600.woff2", 600)
 
 WIDTH = 620            # every graphic shares one column width
 LEFT = 34              # shared left inset, so stacked blocks line up
                        # (year.svg needs it for the weekday gutter)
 REVEAL = 1.30          # seconds; one reveal sweep
-RAMP = [" ", ":", "+", "#", "@"]      # quiet to loud, for draw_year
-MON = ["jan", "feb", "mar", "apr", "may", "jun",
+RAMP = [" ", ":", "+", "#", "@"]      # quiet to loud, for draw_year_map
+MONTHS = ["jan", "feb", "mar", "apr", "may", "jun",
        "jul", "aug", "sep", "oct", "nov", "dec"]
 
 
 # ---------------------------------------------------------------- data
 
-def window():
+def year_window():
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=364)
     return (f"{start.isoformat()}T00:00:00Z", f"{today.isoformat()}T23:59:59Z")
 
 
-def fetch(login, token):
-    since, until = window()
+def fetch_profile(login, token):
+    since, until = year_window()
     body = json.dumps({"query": QUERY,
                        "variables": {"login": login,
                                      "from": since, "to": until}}).encode()
@@ -143,17 +143,17 @@ def fetch(login, token):
     return user
 
 
-def pretty(iso):
+def day_label(iso):
     d = date.fromisoformat(iso)
-    return f"{MON[d.month - 1]} {d.day}"
+    return f"{MONTHS[d.month - 1]} {d.day}"
 
 
-def month_year(iso):
+def month_label(iso):
     d = date.fromisoformat(iso)
-    return f"{MON[d.month - 1]} {d.year}"
+    return f"{MONTHS[d.month - 1]} {d.year}"
 
 
-def streaks(days):
+def streak_runs(days):
     """Current and longest runs of days with at least one contribution.
 
     A zero on the final day doesn't break the current streak — the day isn't
@@ -181,7 +181,7 @@ def streaks(days):
     return cur, best
 
 
-def languages(repos):
+def language_totals(repos):
     by_size, by_repo = {}, {}
     for node in repos:
         edges = (node.get("languages") or {}).get("edges") or []
@@ -199,13 +199,13 @@ def languages(repos):
     return rank(by_size), rank(by_repo)
 
 
-def summarise(user):
+def summarise_profile(user):
     cal = user["contributionsCollection"]["contributionCalendar"]
     weeks = [w["contributionDays"] for w in cal["weeks"]]
     days = [d for w in weeks for d in w]
     weekly = [sum(d["contributionCount"] for d in w) for w in weeks]
-    cur, best = streaks(days)
-    by_size, by_repo = languages(user["repositories"]["nodes"])
+    cur, best = streak_runs(days)
+    by_size, by_repo = language_totals(user["repositories"]["nodes"])
     return dict(
         total=cal["totalContributions"],
         active=sum(1 for d in days if d["contributionCount"] > 0),
@@ -217,36 +217,36 @@ def summarise(user):
 
 # ---------------------------------------------------------------- drawing
 
-def style(extra="", font=None):
+def stylesheet(extra="", font=None):
     def block(t):
-        return (f".d-f{{fill:{t['data']}}}.d-s{{stroke:{t['data']}}}"
-                f".e-f{{fill:{t['emph']}}}.m-f{{fill:{t['dim']}}}"
-                f".u-s{{stroke:{t['rule']}}}.r{{stroke:{t['surface']}}}"
-                f".k-f{{fill:{t['ok']}}}.k-s{{stroke:{t['ok']}}}"
-                f".x-f{{fill:{t['bad']}}}.x-s{{stroke:{t['bad']}}}")
-    return (f"<style>{font or font_text()}"
-            f"{block(LIGHT)}.w{{fill:{LIGHT['data']};opacity:.13}}{extra}"
+        return (f".ink{{fill:{t['ink']}}}.ink-line{{stroke:{t['ink']}}}"
+                f".strong{{fill:{t['strong']}}}.mute{{fill:{t['mute']}}}"
+                f".rule{{stroke:{t['rule']}}}.halo{{stroke:{t['surface']}}}"
+                f".pass{{fill:{t['passed']}}}.pass-line{{stroke:{t['passed']}}}"
+                f".fail{{fill:{t['failed']}}}.fail-line{{stroke:{t['failed']}}}")
+    return (f"<style>{font or panel_font()}"
+            f"{block(LIGHT)}.wash{{fill:{LIGHT['ink']};opacity:.13}}{extra}"
             f"@media(prefers-color-scheme:dark){{{block(DARK)}"
-            f".w{{fill:{DARK['data']};opacity:.16}}}}</style>")
+            f".wash{{fill:{DARK['ink']};opacity:.16}}}}</style>")
 
 
-def head(w, h, font=None):
+def svg_open(w, h, font=None):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-            f'viewBox="0 0 {w} {h}" fill="none" font-family="{MONO}">'
-            + style(font=font))
+            f'viewBox="0 0 {w} {h}" fill="none" font-family="{MONO_STACK}">'
+            + stylesheet(font=font))
 
 
-def fade(delay, dur=0.45):
+def fade_in(delay, dur=0.45):
     return (f'<animate attributeName="opacity" from="0" to="1" '
             f'begin="{delay:.2f}s" dur="{dur}s" fill="freeze"/>')
 
 
-def wipe(cid, x, y, w, h, delay, dur=REVEAL):
+def reveal_wipe(clip_id, x, y, w, h, delay, dur=REVEAL):
     """clipPath reveal plus the cursor block that rides its edge."""
-    clip = (f'<clipPath id="{cid}"><rect x="{x}" y="{y}" height="{h}" width="0">'
+    clip = (f'<clipPath id="{clip_id}"><rect x="{x}" y="{y}" height="{h}" width="0">'
             f'<animate attributeName="width" from="0" to="{w}" '
             f'begin="{delay:.2f}s" dur="{dur}s" fill="freeze"/></rect></clipPath>')
-    cursor = (f'<rect y="{y}" width="2" height="{h}" class="d-f" opacity="0">'
+    cursor = (f'<rect y="{y}" width="2" height="{h}" class="ink" opacity="0">'
               f'<animate attributeName="x" from="{x}" to="{x + w}" '
               f'begin="{delay:.2f}s" dur="{dur}s" fill="freeze"/>'
               f'<set attributeName="opacity" to="0.55" begin="{delay:.2f}s"/>'
@@ -255,13 +255,13 @@ def wipe(cid, x, y, w, h, delay, dur=REVEAL):
     return clip, cursor
 
 
-def label(x, y, text, size=11, cls="m-f", anchor="start", extra=""):
+def text_at(x, y, text, size=11, cls="mute", anchor="start", extra=""):
     a = f' text-anchor="{anchor}"' if anchor != "start" else ""
     return (f'<text x="{x}" y="{y}" class="{cls}" font-size="{size}"{a}'
             f'{extra}>{text}</text>')
 
 
-def hbar(x, y, w, h, cls="d-f", r=3.0):
+def bar(x, y, w, h, cls="ink", r=3.0):
     """Horizontal bar: rounded data-end on the right, square at the baseline."""
     if w <= 0.6:
         return ""
@@ -272,104 +272,104 @@ def hbar(x, y, w, h, cls="d-f", r=3.0):
             f'H{x:.1f}Z" class="{cls}"/>')
 
 
-def draw_stats(s):
+def draw_contributions(summary):
     """Hero number, the two secondary counts, and the weekly sparkline."""
     H = 148
-    weekly = s["weekly"] or [0]
+    weekly = summary["weekly"] or [0]
     peak = max(weekly) or 1
-    p = [head(WIDTH, H)]
-    p.append(f'<g opacity="0">{fade(0.10)}'
-             + label(0, 50, s["total"], 52, "e-f", extra=' font-weight="600"')
-             + label(0, 72, "contributions in the last year", 12) + '</g>')
-    for i, (val, lab) in enumerate([(s["active"], "active days"),
-                                    (s["best_week"], "best week")]):
-        p.append(f'<g opacity="0">{fade(0.30 + i * 0.12)}'
-                 + label(WIDTH, 30 + i * 40, val, 19, "e-f", "end",
+    out = [svg_open(WIDTH, H)]
+    out.append(f'<g opacity="0">{fade_in(0.10)}'
+             + text_at(0, 50, summary["total"], 52, "strong", extra=' font-weight="600"')
+             + text_at(0, 72, "contributions in the last year", 12) + '</g>')
+    for i, (val, lab) in enumerate([(summary["active"], "active days"),
+                                    (summary["best_week"], "best week")]):
+        out.append(f'<g opacity="0">{fade_in(0.30 + i * 0.12)}'
+                 + text_at(WIDTH, 30 + i * 40, val, 19, "strong", "end",
                          ' font-weight="600"')
-                 + label(WIDTH, 47 + i * 40, lab, 11, "m-f", "end") + '</g>')
+                 + text_at(WIDTH, 47 + i * 40, lab, 11, "mute", "end") + '</g>')
 
     base, top = H - 10, H - 58
     span = base - top
     step = WIDTH / max(len(weekly) - 1, 1)
     pts = [(i * step, base - (v / peak) * span) for i, v in enumerate(weekly)]
-    clip, cursor = wipe("rs", 0, top - 6, WIDTH, span + 8, 0.50)
-    p.append(clip)
-    p.append('<g clip-path="url(#rs)">')
-    p.append(f'<path d="M{pts[0][0]:.1f} {base:.1f}'
+    clip, cursor = reveal_wipe("rs", 0, top - 6, WIDTH, span + 8, 0.50)
+    out.append(clip)
+    out.append('<g clip-path="url(#rs)">')
+    out.append(f'<path d="M{pts[0][0]:.1f} {base:.1f}'
              + "".join(f'L{x:.1f} {y:.1f}' for x, y in pts)
-             + f'L{pts[-1][0]:.1f} {base:.1f}Z" class="w"/>')
-    p.append(f'<path d="M{pts[0][0]:.1f} {pts[0][1]:.1f}'
+             + f'L{pts[-1][0]:.1f} {base:.1f}Z" class="wash"/>')
+    out.append(f'<path d="M{pts[0][0]:.1f} {pts[0][1]:.1f}'
              + "".join(f'L{x:.1f} {y:.1f}' for x, y in pts[1:])
-             + f'" class="d-s" stroke-width="2" stroke-linejoin="round" '
+             + f'" class="ink-line" stroke-width="2" stroke-linejoin="round" '
              f'stroke-linecap="round"/>')
-    p.append("</g>")
-    p.append(cursor)
+    out.append("</g>")
+    out.append(cursor)
     ex, ey = pts[-1]
-    p.append(f'<circle cx="{ex - 2:.1f}" cy="{ey:.1f}" r="4.5" class="e-f r" '
-             f'stroke-width="2" opacity="0">{fade(0.50 + REVEAL, 0.35)}</circle>')
-    p.append("</svg>")
-    return "".join(p)
+    out.append(f'<circle cx="{ex - 2:.1f}" cy="{ey:.1f}" r="4.5" class="strong halo" '
+             f'stroke-width="2" opacity="0">{fade_in(0.50 + REVEAL, 0.35)}</circle>')
+    out.append("</svg>")
+    return "".join(out)
 
 
-def draw_streak(s):
+def draw_streaks(summary):
     """Current and longest streak, split by a hairline."""
     H = 96
     cells = []
     for k, lab in (("current", "current streak"), ("longest", "longest streak")):
-        r = s[k]
-        span = (f"{pretty(r['start'])} &#8211; {pretty(r['end'])}"
+        r = summary[k]
+        span = (f"{day_label(r['start'])} &#8211; {day_label(r['end'])}"
                 if r["length"] else "&#8212;")
         cells.append((r["length"], lab, span))
 
-    p = [head(WIDTH, H)]
+    out = [svg_open(WIDTH, H)]
     mid = WIDTH / 2
-    p.append(f'<line x1="{mid:.0f}" y1="16" x2="{mid:.0f}" y2="80" '
-             f'class="u-s" stroke-width="1" opacity="0">{fade(0.20)}</line>')
+    out.append(f'<line x1="{mid:.0f}" y1="16" x2="{mid:.0f}" y2="80" '
+             f'class="rule" stroke-width="1" opacity="0">{fade_in(0.20)}</line>')
     for i, (val, lab, span) in enumerate(cells):
         x = LEFT if i == 0 else mid + LEFT
-        p.append(f'<g opacity="0">{fade(0.12 + i * 0.14)}'
-                 + label(x, 44, f"{val}", 34, "e-f", extra=' font-weight="600"')
-                 + label(x, 64, lab, 11)
-                 + label(x, 80, span, 10) + '</g>')
-    p.append("</svg>")
-    return "".join(p)
+        out.append(f'<g opacity="0">{fade_in(0.12 + i * 0.14)}'
+                 + text_at(x, 44, f"{val}", 34, "strong", extra=' font-weight="600"')
+                 + text_at(x, 64, lab, 11)
+                 + text_at(x, 80, span, 10) + '</g>')
+    out.append("</svg>")
+    return "".join(out)
 
 
-def draw_langs(s):
+def draw_languages(summary):
     """Two small charts: share of bytes, and count of repos by main language."""
-    rows = max(len(s["by_size"]), len(s["by_repo"]), 1)
+    rows = max(len(summary["by_size"]), len(summary["by_repo"]), 1)
     H = 26 + rows * 22 + 6
     colw = (WIDTH - LEFT - 30) / 2
     name_w, bar_max = 82, colw - 82 - 44
 
-    p = [head(WIDTH, H)]
-    groups = [(LEFT, "by bytes", s["by_size"], True),
-              (LEFT + colw + 30, "by repos", s["by_repo"], False)]
-    for gi, (gx, title, data, as_pct) in enumerate(groups):
-        p.append(f'<g opacity="0">{fade(0.10 + gi * 0.10)}'
-                 + label(gx, 12, title.upper(), 9, "m-f",
+    out = [svg_open(WIDTH, H)]
+    groups = [(LEFT, "by bytes", summary["by_size"], True),
+              (LEFT + colw + 30, "by repos", summary["by_repo"], False)]
+    for gi, (gx, title, ink, as_pct) in enumerate(groups):
+        out.append(f'<g opacity="0">{fade_in(0.10 + gi * 0.10)}'
+                 + text_at(gx, 12, title.upper(), 9, "mute",
                          extra=' letter-spacing="1.3"') + '</g>')
-        if not data:
+        if not ink:
             continue
-        top = max(v for _, v in data) or 1
-        total = sum(v for _, v in data) or 1
-        cid = f"rl{gi}"
-        clip, cursor = wipe(cid, gx + name_w, 20, bar_max, rows * 22,
+        top = max(v for _, v in ink) or 1
+        total = sum(v for _, v in ink) or 1
+        clip_id = f"rl{gi}"
+        clip, cursor = reveal_wipe(clip_id, gx + name_w, 20, bar_max, rows * 22,
                             0.34 + gi * 0.12, 0.95)
-        p.append(clip)
-        for ri, (name, val) in enumerate(data):
+        out.append(clip)
+        for ri, (name, val) in enumerate(ink):
             y = 26 + ri * 22
             shown = (f"{val / total * 100:.0f}%" if as_pct else f"{val}")
-            p.append(f'<g opacity="0">{fade(0.24 + gi * 0.10 + ri * 0.05)}'
-                     + label(gx, y + 8, name.lower()[:11], 11, "e-f")
-                     + label(gx + colw - 6, y + 8, shown, 11, "m-f", "end")
+            out.append(f'<g opacity="0">{fade_in(0.24 + gi * 0.10 + ri * 0.05)}'
+                     + text_at(gx, y + 8, name.lower()[:11], 11, "strong")
+                     + text_at(gx + colw - 6, y + 8, shown, 11, "mute", "end")
                      + '</g>')
-            p.append(f'<g clip-path="url(#{cid})">'
-                     + hbar(gx + name_w, y, bar_max * val / top, 7)
+            out.append(f'<g clip-path="url(#{clip_id})">'
+                     + bar(gx + name_w, y, bar_max * val / top, 7)
                      + '</g>')
-        p.append(cursor)
-    p.append("</svg>")
-    return "".join(p)
+        out.append(cursor)
+    out.append("</svg>")
+    return "".join(out)
 
 
 # One pass of the red-green loop, in seconds. Every keyframe below is a
@@ -378,23 +378,23 @@ TDD_CYCLE = 12.0
 TDD_CLEAR, TDD_BLANK = 9.20, 10.00   # transcript fades, then an empty beat
 
 
-def _keys(*times):
+def _key_times(*times):
     return ";".join(f"{t / TDD_CYCLE:.4f}" for t in times)
 
 
-def _loop(attr, values, times):
+def _cycle(attr, values, times):
     return (f'<animate attributeName="{attr}" values="{values}" '
-            f'keyTimes="{_keys(*times)}" dur="{TDD_CYCLE}s" '
+            f'keyTimes="{_key_times(*times)}" dur="{TDD_CYCLE}s" '
             f'repeatCount="indefinite"/>')
 
 
-def _cross(x, cy):
+def _fail_mark(x, cy):
     return (f'<path d="M{x} {cy - 4.5}l9 9M{x + 9} {cy - 4.5}l-9 9" '
-            f'class="x-s" stroke-width="1.9" stroke-linecap="round"/>')
+            f'class="fail-line" stroke-width="1.9" stroke-linecap="round"/>')
 
 
-def _check(x, cy):
-    return (f'<path d="M{x} {cy}l3.4 3.6 6.4-8.4" class="k-s" '
+def _pass_mark(x, cy):
+    return (f'<path d="M{x} {cy}l3.4 3.6 6.4-8.4" class="pass-line" '
             f'stroke-width="2" stroke-linecap="round" '
             f'stroke-linejoin="round" fill="none"/>')
 
@@ -407,7 +407,7 @@ def draw_tdd():
     keyframed across one repeating cycle — that is what gives the typed feel,
     and it costs nothing to replay. Opacity keyframes clear the transcript
     before the cycle wraps, so the loop always restarts on an empty pane
-    rather than snapping from full to empty mid-frame.
+    rather than snapping from full to empty miinkrame.
 
     The tick and cross are drawn as paths, not typed: U+2713 and U+2717 are
     outside the inlined latin subset and would fall back to whatever monospace
@@ -424,82 +424,82 @@ def draw_tdd():
     description uses a colon rather than an em dash.
     """
     FS, CW, H = 12.5, 12.5 * 0.6, 178
-    p = [head(WIDTH, H)]
+    out = [svg_open(WIDTH, H)]
 
-    def mono(x, y, text, cls):
+    def span(x, y, text, cls):
         # xml:space is load-bearing: x advances by the character count, so the
         # leading spaces in a run have to survive into the rendered text or
         # the column drifts left by exactly the padding.
-        return label(x, y, text, FS, cls, extra=' xml:space="preserve"')
+        return text_at(x, y, text, FS, cls, extra=' xml:space="preserve"')
 
     # Header: the label, and a phase badge that flips with the transcript.
-    p.append(f'<g opacity="0">{fade(0.10)}'
-             + label(LEFT, 16, "FIRST PRINCIPLES", 9, "m-f",
+    out.append(f'<g opacity="0">{fade_in(0.10)}'
+             + text_at(LEFT, 16, "FIRST PRINCIPLES", 9, "mute",
                      extra=' letter-spacing="1.3"') + '</g>')
-    for word, cls, on, off in (("RED", "x-f", 3.55, 6.70),
-                               ("GREEN", "k-f", 6.70, TDD_CLEAR)):
-        p.append('<g opacity="0">'
-                 + _loop("opacity", "0;0;1;1;0;0",
+    for word, cls, on, off in (("RED", "fail", 3.55, 6.70),
+                               ("GREEN", "pass", 6.70, TDD_CLEAR)):
+        out.append('<g opacity="0">'
+                 + _cycle("opacity", "0;0;1;1;0;0",
                          (0, on, on + 0.30, off, off + 0.40, TDD_CYCLE))
-                 + label(WIDTH, 16, word, 9, cls, "end",
+                 + text_at(WIDTH, 16, word, 9, cls, "end",
                          ' letter-spacing="1.3"') + '</g>')
 
     # Typed lines: (start, y, [(text, class), ...])
-    typed = [
-        (0.30, 48, [("$ ", "m-f"),
-                    ("gradle test --tests BowlingGameTest", "e-f")]),
-        (1.90, 69, [("  spare, then a 3: the score is 16", "d-f")]),
-        (4.65, 129, [("+ ", "k-f"),
-                     ("if (isSpare(i)) score += 10 + rolls[i + 2];", "e-f")]),
+    typed_lines = [
+        (0.30, 48, [("$ ", "mute"),
+                    ("gradle test --tests BowlingGameTest", "strong")]),
+        (1.90, 69, [("  spare, then a 3: the score is 16", "ink")]),
+        (4.65, 129, [("+ ", "pass"),
+                     ("if (isSpare(i)) score += 10 + rolls[i + 2];", "strong")]),
     ]
-    for i, (start, y, parts) in enumerate(typed):
+    for i, (start, y, parts) in enumerate(typed_lines):
         chars = sum(len(t) for t, _ in parts)
         w = chars * CW
         end = start + max(0.55, chars * 0.038)
 
-        p.append(f'<clipPath id="tt{i}">'
+        out.append(f'<clipPath id="tt{i}">'
                  f'<rect x="{LEFT}" y="{y - 14}" height="20" width="0">'
-                 + _loop("width", f"0;0;{w:.1f};{w:.1f}",
+                 + _cycle("width", f"0;0;{w:.1f};{w:.1f}",
                          (0, start, end, TDD_CYCLE))
                  + '</rect></clipPath>')
 
         x = LEFT
         body = []
         for text, cls in parts:
-            body.append(mono(x, y, text, cls))
+            body.append(span(x, y, text, cls))
             x += len(text) * CW
-        p.append(f'<g clip-path="url(#tt{i})">'
-                 + _loop("opacity", "1;1;0;0",
+        out.append(f'<g clip-path="url(#tt{i})">'
+                 + _cycle("opacity", "1;1;0;0",
                          (0, TDD_CLEAR, TDD_BLANK, TDD_CYCLE))
                  + "".join(body) + '</g>')
 
-        p.append(f'<rect y="{y - 12}" width="2" height="15" class="d-f" '
+        out.append(f'<rect y="{y - 12}" width="2" height="15" class="ink" '
                  f'opacity="0">'
-                 + _loop("x", f"{LEFT};{LEFT};{LEFT + w:.1f};{LEFT + w:.1f}",
+                 + _cycle("x", f"{LEFT};{LEFT};{LEFT + w:.1f};{LEFT + w:.1f}",
                          (0, start, end, TDD_CYCLE))
-                 + _loop("opacity", "0;0;0.55;0.55;0;0",
+                 + _cycle("opacity", "0;0;0.55;0.55;0;0",
                          (0, start - 0.08, start, end, end + 0.08, TDD_CYCLE))
                  + '</rect>')
 
     # Result lines: a drawn mark, then the verdict. No typing — a test result
     # arrives all at once.
     for at, y, mark, parts in (
-            (3.55, 99, _cross, [("FAIL", "x-f"),
-                                ("  expected 16, was 13", "m-f")]),
-            (6.70, 159, _check, [("PASS", "k-f"),
-                                 ("  5 tests, 0.02s", "m-f")])):
+            (3.55, 99, _fail_mark, [("FAIL", "fail"),
+                                ("  expected 16, was 13", "mute")]),
+            (6.70, 159, _pass_mark, [("PASS", "pass"),
+                                 ("  5 tests, 0.02s", "mute")])):
         x = LEFT + 20
         body = []
         for text, cls in parts:
-            body.append(mono(x, y, text, cls))
+            body.append(span(x, y, text, cls))
             x += len(text) * CW
-        p.append('<g opacity="0">'
-                 + _loop("opacity", "0;0;1;1;0;0",
+        out.append('<g opacity="0">'
+                 + _cycle("opacity", "0;0;1;1;0;0",
                          (0, at, at + 0.30, TDD_CLEAR, TDD_BLANK, TDD_CYCLE))
                  + mark(LEFT, y - 4) + "".join(body) + '</g>')
 
-    p.append("</svg>")
-    return "".join(p)
+    out.append("</svg>")
+    return "".join(out)
 
 
 def draw_heading(word):
@@ -515,20 +515,20 @@ def draw_heading(word):
     FS = 16
     H = 26
     text_end = len(word) * FS * 0.6 + 18
-    p = [head(WIDTH, H, font=font_head())]
-    p.append(label(0, 18, word, FS, "e-f", extra=' font-weight="600"'))
-    p.append(f'<line x1="{text_end:.0f}" y1="12.5" x2="{WIDTH}" y2="12.5" '
-             f'class="u-s" stroke-width="1"/>')
-    p.append("</svg>")
-    return "".join(p)
+    out = [svg_open(WIDTH, H, font=heading_font())]
+    out.append(text_at(0, 18, word, FS, "strong", extra=' font-weight="600"'))
+    out.append(f'<line x1="{text_end:.0f}" y1="12.5" x2="{WIDTH}" y2="12.5" '
+             f'class="rule" stroke-width="1"/>')
+    out.append("</svg>")
+    return "".join(out)
 
 
-def draw_year(s):
+def draw_year_map(summary):
     """Seven rows by fifty-three weeks, intensity as a character."""
     FS, LH, COLW = 9.2, 11.0, 2
     CW = FS * 0.6
     pad_l, pad_t = LEFT, 44
-    weeks = s["weeks"]
+    weeks = summary["weeks"]
     ncols = len(weeks) * COLW
     H = int(pad_t + 7 * LH + 26)
 
@@ -540,23 +540,23 @@ def draw_year(s):
 
     # A window label rather than a count: the graphic already says how full
     # the year is, and saying it twice turns a texture into a score.
-    span = (f"{month_year(weeks[0][0]['date'])} &#8211; "
-            f"{month_year(weeks[-1][-1]['date'])}") if weeks else ""
+    span = (f"{month_label(weeks[0][0]['date'])} &#8211; "
+            f"{month_label(weeks[-1][-1]['date'])}") if weeks else ""
 
-    p = [head(WIDTH, H)]
-    p.append(f'<g opacity="0">{fade(0.10)}'
-             + label(pad_l, 16, "THE YEAR", 9, "m-f",
+    out = [svg_open(WIDTH, H)]
+    out.append(f'<g opacity="0">{fade_in(0.10)}'
+             + text_at(pad_l, 16, "THE YEAR", 9, "mute",
                      extra=' letter-spacing="1.3"')
-             + label(pad_l, 32, span, 11)
+             + text_at(pad_l, 32, span, 11)
              + '</g>')
 
     # ramp legend, so the encoding is never carried by shade alone
     lx = WIDTH - 6
-    p.append(f'<g opacity="0">{fade(1.30)}'
-             + label(lx - 78, 32, "less", 9, "m-f", "end")
-             + f'<text xml:space="preserve" x="{lx - 72}" y="32" class="d-f" '
+    out.append(f'<g opacity="0">{fade_in(1.30)}'
+             + text_at(lx - 78, 32, "less", 9, "mute", "end")
+             + f'<text xml:space="preserve" x="{lx - 72}" y="32" class="ink" '
              f'font-size="{FS}">{" ".join(RAMP[1:])}</text>'
-             + label(lx, 32, "more", 9, "m-f", "end") + '</g>')
+             + text_at(lx, 32, "more", 9, "mute", "end") + '</g>')
 
     for r in range(7):
         chars = []
@@ -569,19 +569,19 @@ def draw_year(s):
             continue
         y = pad_t + r * LH
         w_px = max(len(line), 1) * CW
-        cid = f"ry{r}"
+        clip_id = f"ry{r}"
         delay = 0.30 + r * 0.07
-        p.append(f'<clipPath id="{cid}"><rect x="{pad_l}" y="{y}" '
+        out.append(f'<clipPath id="{clip_id}"><rect x="{pad_l}" y="{y}" '
                  f'height="{LH}" width="0"><animate attributeName="width" '
                  f'from="0" to="{w_px:.1f}" begin="{delay:.2f}s" dur="0.40s" '
                  f'fill="freeze"/></rect></clipPath>')
         safe = line.replace("&", "&amp;").replace("<", "&lt;")
-        p.append(f'<g clip-path="url(#{cid})"><text xml:space="preserve" '
-                 f'x="{pad_l}" y="{y + FS - 0.6:.1f}" class="d-f" '
+        out.append(f'<g clip-path="url(#{clip_id})"><text xml:space="preserve" '
+                 f'x="{pad_l}" y="{y + FS - 0.6:.1f}" class="ink" '
                  f'font-size="{FS}">{safe}</text></g>')
 
     for r, lab in ((1, "mon"), (3, "wed"), (5, "fri")):
-        p.append(label(pad_l - 7, pad_t + r * LH + FS - 0.6, lab, 9, "m-f",
+        out.append(text_at(pad_l - 7, pad_t + r * LH + FS - 0.6, lab, 9, "mute",
                        "end"))
 
     last_m, last_x = None, -999.0
@@ -590,17 +590,17 @@ def draw_year(s):
         m = int(w[0]["date"][5:7])
         x = pad_l + i * COLW * CW
         if m != last_m and i < len(weeks) - 1 and x - last_x >= 34:
-            p.append(label(x, base_y, MON[m - 1], 9, "m-f"))
+            out.append(text_at(x, base_y, MONTHS[m - 1], 9, "mute"))
             last_x = x
         last_m = m
 
-    p.append("</svg>")
-    return "".join(p)
+    out.append("</svg>")
+    return "".join(out)
 
 
 # ---------------------------------------------------------------- main
 
-def write(path, svg):
+def write_if_changed(path, svg):
     old = ""
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -617,7 +617,7 @@ HEADINGS = ("about", "stack", "vibecoding tools", "currently", "socials")
 
 # Data graphics to draw. Empty, so no token and no network call is needed.
 # Add a name here — and its <img> to the README — to switch one back on.
-STAT_FILES = ()
+DATA_PANELS = ()
 
 
 def main():
@@ -626,17 +626,17 @@ def main():
              for w in HEADINGS}
     files["tdd.svg"] = draw_tdd()
 
-    if STAT_FILES:
-        drawers = {"stats.svg": draw_stats, "streak.svg": draw_streak,
-                   "langs.svg": draw_langs, "year.svg": draw_year}
+    if DATA_PANELS:
+        drawers = {"stats.svg": draw_contributions, "streak.svg": draw_streaks,
+                   "langs.svg": draw_languages, "year.svg": draw_year_map}
         token = os.environ.get("GITHUB_TOKEN")
         if not token:
             sys.exit("GITHUB_TOKEN is not set")
-        s = summarise(fetch(os.environ.get("GH_LOGIN", "pixelpeg"), token))
-        files.update({n: drawers[n](s) for n in STAT_FILES})
+        summary = summarise_profile(fetch_profile(os.environ.get("GH_LOGIN", "pixelpeg"), token))
+        files.update({n: drawers[n](summary) for n in DATA_PANELS})
 
     changed = [n for n, svg in files.items()
-               if write(os.path.join(out_dir, n), svg)]
+               if write_if_changed(os.path.join(out_dir, n), svg)]
     print("updated: " + (", ".join(sorted(changed)) if changed else "nothing"))
 
 
