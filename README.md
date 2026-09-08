@@ -22,18 +22,15 @@ code that makes it pass:
 
 <img src="./hd-stack.svg" width="620" alt="stack"/>
 
-<samp>kotlin &nbsp; java &nbsp; typescript &nbsp; python</samp><br>
-<samp>spring boot &nbsp; rest apis &nbsp; kafka &nbsp; postgres</samp><br>
-<samp>react &nbsp; tailwind css &nbsp; shadcn/ui</samp><br>
-<samp>docker &nbsp; kubernetes &nbsp; azure &nbsp; grafana + prometheus</samp><br>
-<samp>git &nbsp; bruno</samp>
+<samp>react &nbsp; typescript &nbsp; tailwind css &nbsp; shadcn/ui </samp><br>
+<samp> java &nbsp; python &nbsp; spring boot &nbsp; restapis  &nbsp; fastapis &nbsp; postgres </samp><br>
+<samp> kafka &nbsp; docker &nbsp; kubernetes &nbsp; azure &nbsp; grafana + prometheus &nbsp;</samp><br>
 
 <img src="./hd-vibecoding-tools.svg" width="620" alt="vibecoding tools"/>
 
-Yep — the backend engineer trying the vibecoding tools, to stay with the trend :)<br>
-A short list on purpose: these are the ones that actually ship something.
+> Yep, the backend engineer trying the vibecoding tools, to stay with the trend :)<br>
 
-<samp>obsidian</samp> &nbsp;<sub>(notes, of course)</sub> &nbsp;&nbsp; <samp>claude code &nbsp; codex &nbsp; supabase &nbsp; clerk</samp>
+<samp>obsidian &nbsp; claude code &nbsp; codex &nbsp; supabase &nbsp; clerk</samp>
 
 <img src="./hd-currently.svg" width="620" alt="currently"/>
 
@@ -45,5 +42,5 @@ A short list on purpose: these are the ones that actually ship something.
 <img src="./hd-socials.svg" width="620" alt="socials"/>
 
 [email](mailto:invinciblecodes@gmail.com) &nbsp;·&nbsp;
-[linkedin](https://www.linkedin.com/in/CHANGEME) &nbsp;·&nbsp;
-[leetcode](https://leetcode.com/u/CHANGEME/)
+[linkedin](https://www.linkedin.com/in/shrestha-raj) &nbsp;
+
