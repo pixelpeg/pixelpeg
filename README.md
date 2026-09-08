@@ -1,9 +1,3 @@
-<div align="center">
-
-<img src="./ascii.svg" width="460" alt="Shrestha Raj"/>
-
-</div>
-
 <img src="./hd-about.svg" width="620" alt="about"/>
 
 > Full stack engineer, specialising in backend.

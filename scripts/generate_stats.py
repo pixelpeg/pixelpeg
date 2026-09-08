@@ -13,10 +13,9 @@ bring it back, and the API fetch turns itself on.
   langs.svg   top languages, by bytes and by repo  (draw_langs)
   year.svg    the year as a character map          (draw_year)
 
-Everything shares one visual language with ascii.svg (the portrait): the same
-grey ink, a monospace face, a transparent background, and a left-to-right
-clipPath reveal with a cursor riding the edge. Motion is SMIL because GitHub
-strips <script> from READMEs.
+Everything shares one visual language: the same grey ink, a monospace face,
+a transparent background, and a left-to-right clipPath reveal with a cursor
+riding the edge. Motion is SMIL because GitHub strips <script> from READMEs.
 
 Env:
   GITHUB_TOKEN  required only when STAT_FILES is non-empty
@@ -60,7 +59,7 @@ query($login: String!, $from: DateTime!, $to: DateTime!) {
 }
 """
 
-# The portrait's ink is the data ink, so every graphic reads as one material.
+# One ink across every graphic, so the page reads as one material.
 LIGHT = dict(data="#6e7681", emph="#424a53", dim="#8c959f",
              rule="#d8dee4", surface="#ffffff",
              ok="#1a7f37", bad="#cf222e")
@@ -80,8 +79,10 @@ def face(filename, weight):
 
     An external font URL cannot work here: these SVGs are loaded through <img>,
     and browsers refuse to fetch subresources for an image document. Inlining is
-    also what pins the advance width — the portrait's grid assumes 0.600 em, and
-    a viewer whose default monospace is narrower would otherwise see it squeezed.
+    also what pins the advance width. draw_tdd places each run of text by
+    multiplying a character count by 0.600 em, so a viewer whose default
+    monospace is narrower would see those runs drift left of where the
+    clipPath that reveals them ends.
     """
     with open(os.path.join(FONT_DIR, filename), "rb") as f:
         b64 = base64.b64encode(f.read()).decode("ascii")
@@ -108,8 +109,8 @@ def font_head():
 WIDTH = 620            # every graphic shares one column width
 LEFT = 34              # shared left inset, so stacked blocks line up
                        # (year.svg needs it for the weekday gutter)
-REVEAL = 1.30          # seconds; matches the portrait's cadence
-RAMP = [" ", ":", "+", "#", "@"]      # steps of the portrait's own ramp
+REVEAL = 1.30          # seconds; one reveal sweep
+RAMP = [" ", ":", "+", "#", "@"]      # quiet to loud, for draw_year
 MON = ["jan", "feb", "mar", "apr", "may", "jun",
        "jul", "aug", "sep", "oct", "nov", "dec"]
 
