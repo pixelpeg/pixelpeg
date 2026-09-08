@@ -18,9 +18,14 @@ Why inline it at all:
 | file | weight | covers |
 |---|---|---|
 | `jbmono-ramp.woff2` | 400 | the 13 ramp characters in `ascii.svg` |
-| `jbmono-head.woff2` | 600 | the letters used by the section headings |
-| `jbmono-400.woff2` | 400 | basic latin, for the stat graphics |
-| `jbmono-600.woff2` | 600 | basic latin, for the stat graphics |
+| `jbmono-400.woff2` | 400 | basic latin, for the panels |
+| `jbmono-600.woff2` | 600 | basic latin, for the panels and the headings |
+
+There was a fourth file, `jbmono-head.woff2`, cut to exactly the letters the
+section headings spelled. It is gone: it saved about 3 KB and broke silently
+the first time a section was renamed, dropping the new word's missing glyphs
+back to whatever monospace the viewer happens to have. Section names are
+content, so the headings now use the full latin cut.
 
 Licensed under the SIL Open Font License 1.1 — see `OFL.txt`. Subsetting and
 redistribution in this form are permitted; the reserved font name is unchanged.

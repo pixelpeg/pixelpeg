@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""Draw the profile README's stat graphics from the GitHub GraphQL API.
+"""Draw the profile README's SVG graphics.
 
 No third-party services and no dependencies — standard library only.
 
-Outputs, all sharing one visual language with ascii.svg (the portrait):
-  stats.svg   hero total + weekly sparkline
-  streak.svg  current and longest streak
-  langs.svg   top languages, by bytes and by repo count
-  year.svg    the year as a character map, in the portrait's own ramp
+The page is prose plus section headings, so this writes only the hd-*.svg
+headings and needs no network and no token. The data graphics below are kept
+and still work; name one in STAT_FILES and add its <img> to the README to
+bring it back, and the API fetch turns itself on.
 
-Every file uses the portrait's grey ink, a monospace face, a transparent
-background, and the same left-to-right clipPath reveal with a cursor riding
-the edge. Motion is SMIL because GitHub strips <script> from READMEs.
+  stats.svg   hero total + weekly sparkline        (draw_stats)
+  streak.svg  current and longest streak           (draw_streak)
+  langs.svg   top languages, by bytes and by repo  (draw_langs)
+  year.svg    the year as a character map          (draw_year)
+
+Everything shares one visual language with ascii.svg (the portrait): the same
+grey ink, a monospace face, a transparent background, and a left-to-right
+clipPath reveal with a cursor riding the edge. Motion is SMIL because GitHub
+strips <script> from READMEs.
 
 Env:
-  GITHUB_TOKEN  required
+  GITHUB_TOKEN  required only when STAT_FILES is non-empty
   GH_LOGIN      user to summarise (default: pixelpeg)
   OUT_DIR       where to write (default: repository root)
 """
@@ -57,9 +62,11 @@ query($login: String!, $from: DateTime!, $to: DateTime!) {
 
 # The portrait's ink is the data ink, so every graphic reads as one material.
 LIGHT = dict(data="#6e7681", emph="#424a53", dim="#8c959f",
-             rule="#d8dee4", surface="#ffffff")
+             rule="#d8dee4", surface="#ffffff",
+             ok="#1a7f37", bad="#cf222e")
 DARK = dict(data="#c9d1d9", emph="#f0f6fc", dim="#8b949e",
-            rule="#30363d", surface="#0d1117")
+            rule="#30363d", surface="#0d1117",
+            ok="#3fb950", bad="#f85149")
 # JBMono is the inlined subset below; the rest is a fallback for the unlikely
 # case a renderer ignores the embedded face.
 MONO = ("JBMono,ui-monospace,SFMono-Regular,Menlo,Consolas,"
@@ -89,8 +96,14 @@ def font_text():
 
 
 def font_head():
-    """Only the letters the section headings use."""
-    return face("jbmono-head.woff2", 600)
+    """Basic latin at 600.
+
+    This was once a subset cut to exactly the letters the headings spelled,
+    which is smaller but silently breaks the moment a section is renamed: a
+    missing glyph falls back to the viewer's own monospace mid-word. Section
+    names are content, so they get the face that covers all of them.
+    """
+    return face("jbmono-600.woff2", 600)
 
 WIDTH = 620            # every graphic shares one column width
 LEFT = 34              # shared left inset, so stacked blocks line up
@@ -132,6 +145,11 @@ def fetch(login, token):
 def pretty(iso):
     d = date.fromisoformat(iso)
     return f"{MON[d.month - 1]} {d.day}"
+
+
+def month_year(iso):
+    d = date.fromisoformat(iso)
+    return f"{MON[d.month - 1]} {d.year}"
 
 
 def streaks(days):
@@ -202,7 +220,9 @@ def style(extra="", font=None):
     def block(t):
         return (f".d-f{{fill:{t['data']}}}.d-s{{stroke:{t['data']}}}"
                 f".e-f{{fill:{t['emph']}}}.m-f{{fill:{t['dim']}}}"
-                f".u-s{{stroke:{t['rule']}}}.r{{stroke:{t['surface']}}}")
+                f".u-s{{stroke:{t['rule']}}}.r{{stroke:{t['surface']}}}"
+                f".k-f{{fill:{t['ok']}}}.k-s{{stroke:{t['ok']}}}"
+                f".x-f{{fill:{t['bad']}}}.x-s{{stroke:{t['bad']}}}")
     return (f"<style>{font or font_text()}"
             f"{block(LIGHT)}.w{{fill:{LIGHT['data']};opacity:.13}}{extra}"
             f"@media(prefers-color-scheme:dark){{{block(DARK)}"
@@ -351,6 +371,124 @@ def draw_langs(s):
     return "".join(p)
 
 
+# One pass of the red-green loop, in seconds. Every keyframe below is a
+# wall-clock time inside this window; _keys turns them into SMIL fractions.
+TDD_CYCLE = 11.0
+TDD_CLEAR, TDD_BLANK = 8.60, 9.40    # transcript fades, then an empty beat
+
+
+def _keys(*times):
+    return ";".join(f"{t / TDD_CYCLE:.4f}" for t in times)
+
+
+def _loop(attr, values, times):
+    return (f'<animate attributeName="{attr}" values="{values}" '
+            f'keyTimes="{_keys(*times)}" dur="{TDD_CYCLE}s" '
+            f'repeatCount="indefinite"/>')
+
+
+def _cross(x, cy):
+    return (f'<path d="M{x} {cy - 4.5}l9 9M{x + 9} {cy - 4.5}l-9 9" '
+            f'class="x-s" stroke-width="1.9" stroke-linecap="round"/>')
+
+
+def _check(x, cy):
+    return (f'<path d="M{x} {cy}l3.4 3.6 6.4-8.4" class="k-s" '
+            f'stroke-width="2" stroke-linecap="round" '
+            f'stroke-linejoin="round" fill="none"/>')
+
+
+def draw_tdd():
+    """The red-green loop, typing itself out and then starting over.
+
+    GitHub strips <script> from a README, so "interactive" can only mean SMIL
+    inside the SVG. Each line is revealed by a clipPath whose width is
+    keyframed across one repeating cycle — that is what gives the typed feel,
+    and it costs nothing to replay. Opacity keyframes clear the transcript
+    before the cycle wraps, so the loop always restarts on an empty pane
+    rather than snapping from full to empty mid-frame.
+
+    The tick and cross are drawn as paths, not typed: U+2713 and U+2717 are
+    outside the inlined latin subset and would fall back to whatever monospace
+    the viewer happens to have.
+    """
+    FS, CW, H = 12.5, 12.5 * 0.6, 178
+    p = [head(WIDTH, H)]
+
+    def mono(x, y, text, cls):
+        # xml:space is load-bearing: x advances by the character count, so the
+        # leading spaces in a run have to survive into the rendered text or
+        # the column drifts left by exactly the padding.
+        return label(x, y, text, FS, cls, extra=' xml:space="preserve"')
+
+    # Header: the label, and a phase badge that flips with the transcript.
+    p.append(f'<g opacity="0">{fade(0.10)}'
+             + label(LEFT, 16, "FIRST PRINCIPLES", 9, "m-f",
+                     extra=' letter-spacing="1.3"') + '</g>')
+    for word, cls, on, off in (("RED", "x-f", 2.80, 5.60),
+                               ("GREEN", "k-f", 5.60, TDD_CLEAR)):
+        p.append('<g opacity="0">'
+                 + _loop("opacity", "0;0;1;1;0;0",
+                         (0, on, on + 0.30, off, off + 0.40, TDD_CYCLE))
+                 + label(WIDTH, 16, word, 9, cls, "end",
+                         ' letter-spacing="1.3"') + '</g>')
+
+    # Typed lines: (start, y, [(text, class), ...])
+    typed = [
+        (0.30, 48, [("$ ", "m-f"), ("write the test", "e-f")]),
+        (1.30, 69, [("  assert add(2, 2) == 4", "d-f")]),
+        (3.90, 129, [("+ ", "k-f"), ("fun add(a: Int, b: Int) = a + b", "e-f")]),
+    ]
+    for i, (start, y, parts) in enumerate(typed):
+        chars = sum(len(t) for t, _ in parts)
+        w = chars * CW
+        end = start + max(0.55, chars * 0.038)
+
+        p.append(f'<clipPath id="tt{i}">'
+                 f'<rect x="{LEFT}" y="{y - 14}" height="20" width="0">'
+                 + _loop("width", f"0;0;{w:.1f};{w:.1f}",
+                         (0, start, end, TDD_CYCLE))
+                 + '</rect></clipPath>')
+
+        x = LEFT
+        body = []
+        for text, cls in parts:
+            body.append(mono(x, y, text, cls))
+            x += len(text) * CW
+        p.append(f'<g clip-path="url(#tt{i})">'
+                 + _loop("opacity", "1;1;0;0",
+                         (0, TDD_CLEAR, TDD_BLANK, TDD_CYCLE))
+                 + "".join(body) + '</g>')
+
+        p.append(f'<rect y="{y - 12}" width="2" height="15" class="d-f" '
+                 f'opacity="0">'
+                 + _loop("x", f"{LEFT};{LEFT};{LEFT + w:.1f};{LEFT + w:.1f}",
+                         (0, start, end, TDD_CYCLE))
+                 + _loop("opacity", "0;0;0.55;0.55;0;0",
+                         (0, start - 0.08, start, end, end + 0.08, TDD_CYCLE))
+                 + '</rect>')
+
+    # Result lines: a drawn mark, then the verdict. No typing — a test result
+    # arrives all at once.
+    for at, y, mark, parts in (
+            (2.80, 99, _cross, [("FAIL", "x-f"),
+                                ("  unresolved reference: add", "m-f")]),
+            (5.60, 159, _check, [("PASS", "k-f"),
+                                 ("  1 test, 0.03s", "m-f")])):
+        x = LEFT + 20
+        body = []
+        for text, cls in parts:
+            body.append(mono(x, y, text, cls))
+            x += len(text) * CW
+        p.append('<g opacity="0">'
+                 + _loop("opacity", "0;0;1;1;0;0",
+                         (0, at, at + 0.30, TDD_CLEAR, TDD_BLANK, TDD_CYCLE))
+                 + mark(LEFT, y - 4) + "".join(body) + '</g>')
+
+    p.append("</svg>")
+    return "".join(p)
+
+
 def draw_heading(word):
     """A section heading in the mono face, with a hairline running right.
 
@@ -387,12 +525,16 @@ def draw_year(s):
                 return i
         return 4
 
+    # A window label rather than a count: the graphic already says how full
+    # the year is, and saying it twice turns a texture into a score.
+    span = (f"{month_year(weeks[0][0]['date'])} &#8211; "
+            f"{month_year(weeks[-1][-1]['date'])}") if weeks else ""
+
     p = [head(WIDTH, H)]
     p.append(f'<g opacity="0">{fade(0.10)}'
              + label(pad_l, 16, "THE YEAR", 9, "m-f",
                      extra=' letter-spacing="1.3"')
-             + label(pad_l, 32, f"{s['active']} of "
-                     f"{sum(len(w) for w in weeks)} days had a contribution", 11)
+             + label(pad_l, 32, span, 11)
              + '</g>')
 
     # ramp legend, so the encoding is never carried by shade alone
@@ -457,26 +599,31 @@ def write(path, svg):
     return True
 
 
-def main():
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        sys.exit("GITHUB_TOKEN is not set")
-    login = os.environ.get("GH_LOGIN", "pixelpeg")
-    out_dir = os.environ.get("OUT_DIR", ".")
+# The page's sections, in order. Each becomes hd-<word>.svg.
+HEADINGS = ("about", "stack", "vibecoding tools", "currently", "socials")
 
-    s = summarise(fetch(login, token))
-    files = {"stats.svg": draw_stats(s), "streak.svg": draw_streak(s),
-             "langs.svg": draw_langs(s), "year.svg": draw_year(s)}
-    for word in ("about", "stack", "projects", "stats", "about this page"):
-        files[f"hd-{word.replace(' ', '-')}.svg"] = draw_heading(word)
+# Data graphics to draw. Empty, so no token and no network call is needed.
+# Add a name here — and its <img> to the README — to switch one back on.
+STAT_FILES = ()
+
+
+def main():
+    out_dir = os.environ.get("OUT_DIR", ".")
+    files = {f"hd-{w.replace(' ', '-')}.svg": draw_heading(w)
+             for w in HEADINGS}
+    files["tdd.svg"] = draw_tdd()
+
+    if STAT_FILES:
+        drawers = {"stats.svg": draw_stats, "streak.svg": draw_streak,
+                   "langs.svg": draw_langs, "year.svg": draw_year}
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            sys.exit("GITHUB_TOKEN is not set")
+        s = summarise(fetch(os.environ.get("GH_LOGIN", "pixelpeg"), token))
+        files.update({n: drawers[n](s) for n in STAT_FILES})
 
     changed = [n for n, svg in files.items()
                if write(os.path.join(out_dir, n), svg)]
-    print(f"{s['total']} contributions, {s['active']} active days, "
-          f"best week {s['best_week']}, current streak "
-          f"{s['current']['length']}, longest {s['longest']['length']}")
-    print("languages by bytes: "
-          + ", ".join(f"{n} {v}" for n, v in s["by_size"]))
     print("updated: " + (", ".join(sorted(changed)) if changed else "nothing"))
 
 
