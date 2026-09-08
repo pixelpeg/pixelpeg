@@ -11,12 +11,19 @@
 I build tools that automate my everyday life, so the time goes to the actual<br>
 changes instead of the errands around them.
 
-First principles, every time — write the test, watch it fail, then add only the<br>
-code that makes it pass:
+First principles, straight out of Kent Beck's *Test-Driven Development: By<br>
+Example* — red, green, refactor. Write a test that fails. Make it pass with the<br>
+smallest change that could possibly work. Then take out the duplication.
+
+> "Never write a line of functional code without a broken test."<br>
+> — Kent Beck
+
+Below, the loop on the bowling kata — the spare, where summing the rolls stops<br>
+working and the failing test is what forces the frame logic into existence:
 
 <div align="center">
 
-<img src="./tdd.svg" width="620" alt="write the test, watch it fail, make it pass"/>
+<img src="./tdd.svg" width="620" alt="a failing bowling score test, then the fix that makes it pass"/>
 
 </div>
 

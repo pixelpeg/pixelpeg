@@ -373,8 +373,8 @@ def draw_langs(s):
 
 # One pass of the red-green loop, in seconds. Every keyframe below is a
 # wall-clock time inside this window; _keys turns them into SMIL fractions.
-TDD_CYCLE = 11.0
-TDD_CLEAR, TDD_BLANK = 8.60, 9.40    # transcript fades, then an empty beat
+TDD_CYCLE = 12.0
+TDD_CLEAR, TDD_BLANK = 9.20, 10.00   # transcript fades, then an empty beat
 
 
 def _keys(*times):
@@ -411,6 +411,16 @@ def draw_tdd():
     The tick and cross are drawn as paths, not typed: U+2713 and U+2717 are
     outside the inlined latin subset and would fall back to whatever monospace
     the viewer happens to have.
+
+    The scenario is the pivot of Robert C. Martin's bowling game kata. Rolls
+    of 5, 5, 3 sum to 13, and summing is what the earlier tests in the kata
+    let you get away with; the spare is the first case that sum() cannot
+    fake, and it scores 16 — frame one is 10 plus the next roll, frame two
+    is 3. The failing assertion is what forces the frame logic into
+    existence, which is the whole argument for writing it first.
+
+    Only characters in the inlined latin subset can appear here, so the test
+    description uses a colon rather than an em dash.
     """
     FS, CW, H = 12.5, 12.5 * 0.6, 178
     p = [head(WIDTH, H)]
@@ -425,8 +435,8 @@ def draw_tdd():
     p.append(f'<g opacity="0">{fade(0.10)}'
              + label(LEFT, 16, "FIRST PRINCIPLES", 9, "m-f",
                      extra=' letter-spacing="1.3"') + '</g>')
-    for word, cls, on, off in (("RED", "x-f", 2.80, 5.60),
-                               ("GREEN", "k-f", 5.60, TDD_CLEAR)):
+    for word, cls, on, off in (("RED", "x-f", 3.55, 6.70),
+                               ("GREEN", "k-f", 6.70, TDD_CLEAR)):
         p.append('<g opacity="0">'
                  + _loop("opacity", "0;0;1;1;0;0",
                          (0, on, on + 0.30, off, off + 0.40, TDD_CYCLE))
@@ -435,9 +445,11 @@ def draw_tdd():
 
     # Typed lines: (start, y, [(text, class), ...])
     typed = [
-        (0.30, 48, [("$ ", "m-f"), ("write the test", "e-f")]),
-        (1.30, 69, [("  assert add(2, 2) == 4", "d-f")]),
-        (3.90, 129, [("+ ", "k-f"), ("fun add(a: Int, b: Int) = a + b", "e-f")]),
+        (0.30, 48, [("$ ", "m-f"),
+                    ("gradle test --tests BowlingGameTest", "e-f")]),
+        (1.90, 69, [("  spare, then a 3: the score is 16", "d-f")]),
+        (4.65, 129, [("+ ", "k-f"),
+                     ("if (isSpare(i)) score += 10 + rolls[i + 2];", "e-f")]),
     ]
     for i, (start, y, parts) in enumerate(typed):
         chars = sum(len(t) for t, _ in parts)
@@ -471,10 +483,10 @@ def draw_tdd():
     # Result lines: a drawn mark, then the verdict. No typing — a test result
     # arrives all at once.
     for at, y, mark, parts in (
-            (2.80, 99, _cross, [("FAIL", "x-f"),
-                                ("  unresolved reference: add", "m-f")]),
-            (5.60, 159, _check, [("PASS", "k-f"),
-                                 ("  1 test, 0.03s", "m-f")])):
+            (3.55, 99, _cross, [("FAIL", "x-f"),
+                                ("  expected 16, was 13", "m-f")]),
+            (6.70, 159, _check, [("PASS", "k-f"),
+                                 ("  5 tests, 0.02s", "m-f")])):
         x = LEFT + 20
         body = []
         for text, cls in parts:
