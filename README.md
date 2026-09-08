@@ -2,24 +2,7 @@
 
 > Full stack engineer, specialising in backend.
 
-I build tools that automate my everyday life, so the time goes to the actual<br>
-changes instead of the errands around them.
-
-First principles, straight out of Kent Beck's *Test-Driven Development: By<br>
-Example* — red, green, refactor. Write a test that fails. Make it pass with the<br>
-smallest change that could possibly work. Then take out the duplication.
-
-> "Never write a line of functional code without a broken test."<br>
-> — Kent Beck
-
-Below, the loop on the bowling kata — the spare, where summing the rolls stops<br>
-working and the failing test is what forces the frame logic into existence:
-
-<div align="center">
-
-<img src="./tdd.svg" width="620" alt="a failing bowling score test, then the fix that makes it pass"/>
-
-</div>
+I build tools that automate my everyday life, so the time goes to the actual changes instead of the errands around them.
 
 <img src="./hd-stack.svg" width="620" alt="stack"/>
 
@@ -39,6 +22,20 @@ working and the failing test is what forces the frame logic into existence:
 <samp>-></samp> &nbsp;grinding leetcode<br>
 <samp>-></samp> &nbsp;learning how systems scale, then breaking them to find out where they don't<br>
 <samp>-></samp> &nbsp;yapping about tech
+
+
+Following <b><i>first principles</i></b> always, straight out of Kent Beck
+> "Never write a line of functional code without a broken test."<br>
+> — Kent Beck
+
+TDD snippet with bowling kata example: the spare, where summing the rolls stops working and the failing test is what forces the frame logic into existence:
+
+<div align="center">
+
+<img src="./tdd.svg" width="620" alt="a failing bowling score test, then the fix that makes it pass"/>
+
+</div>
+
 
 <img src="./hd-socials.svg" width="620" alt="socials"/>
 
